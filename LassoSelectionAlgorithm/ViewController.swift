@@ -14,9 +14,19 @@ class Layer {
     var points = [CGPoint]()
 }
 
+
+// create sides
+struct PolygonSide {
+    let begin: CGPoint
+    let end: CGPoint
+}
+
 class RenderingView: UIView {
     
     let lassoButton = UIButton()
+    var virtualRays = [CGPoint]()
+    var intersectionPoints = [CGPoint]()
+    var reducedPolygonSides = [PolygonSide]()
     let clearButton = UIButton()
     let undoLastLineButton = UIButton()
     var lassoMode = false
@@ -99,11 +109,20 @@ class RenderingView: UIView {
         }
     }
     
+    
+    
+    
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext()else { return }
         
         context.clear(rect)
         
+        
+        
+        
+        
+        
+        // render lines
         
         layers.forEach { layer in
             
@@ -119,11 +138,16 @@ class RenderingView: UIView {
             context.strokePath()
         }
         
-        context.setStrokeColor(UIColor.orange.cgColor)
+        
+        
+        
+        
         
         
         
         // render lasso
+        
+        context.setStrokeColor(UIColor.orange.cgColor)
         
         if lasso.points.count > 0 {
             
@@ -140,12 +164,71 @@ class RenderingView: UIView {
             }
         }
         
+        context.strokePath()
+
+  
+     
         
+        
+        
+        // render reduced polygon sides
+        
+        context.setStrokeColor(UIColor.purple.cgColor)
+        context.setLineWidth(5)
+        
+        if reducedPolygonSides.count > 1 {
+        
+            for i in 0...reducedPolygonSides.count - 1 {
+                
+                if i == 0 {
+                    context.move(to: reducedPolygonSides[0].begin)
+                    context.addLine(to: reducedPolygonSides[0].end)
+                    continue
+                }
+                
+                context.addLine(to: reducedPolygonSides[i].begin)
+                context.addLine(to: reducedPolygonSides[i].end)
+            }
+        }
         
         context.strokePath()
         
         
         
+        
+        
+        
+        
+        // render virtual rays
+        
+        context.setStrokeColor(UIColor.yellow.withAlphaComponent(0.4).cgColor)
+        context.setLineWidth(1)
+        
+        for ray in virtualRays {
+            
+            context.move(to: ray)
+            context.addLine(to: CGPoint(x: ray.x + 2000, y: ray.y))
+        }
+        
+        context.strokePath()
+        
+        
+        
+        
+        
+        
+        // render intersection points
+        
+        context.setFillColor(UIColor.green.cgColor)
+        
+        for point in intersectionPoints {
+            context.addArc(center: point, radius: 2, startAngle: 0, endAngle: CGFloat.pi * 2, clockwise: true)
+            context.fillPath()
+        }
+        
+        
+        
+   
         
         
         
@@ -169,58 +252,59 @@ class RenderingView: UIView {
         
         
         
-        var minX = CGFloat.greatestFiniteMagnitude
-        var maxX: CGFloat = 0
-        var minY = CGFloat.greatestFiniteMagnitude
-        var maxY: CGFloat = 0
+//        var minX = CGFloat.greatestFiniteMagnitude
+//        var maxX: CGFloat = 0
+//        var minY = CGFloat.greatestFiniteMagnitude
+//        var maxY: CGFloat = 0
+//
+//        lasso.points.forEach { point in // find min x
+//            if point.x < minX { minX = point.x }
+//        }
+//        lasso.points.forEach { point in // find max x
+//            if point.x > maxX { maxX = point.x }
+//        }
+//        lasso.points.forEach { point in // find min y
+//            if point.y < minY { minY = point.y }
+//        }
+//        lasso.points.forEach { point in // find max y
+//            if point.y > maxY { maxY = point.y }
+//        }
+//
+//        // bounding box check
+//        for layer in layers {
+//            var pointInside = false
+//            for point in layer.points {
+//                if point.x > minX && point.x < maxX && point.y > minY && point.y < maxY {
+//                    pointInside = true
+//                }
+//            }
+//            layer.selected = pointInside
+//        }
         
-        lasso.points.forEach { point in // find min x
-            if point.x < minX { minX = point.x }
-        }
-        lasso.points.forEach { point in // find max x
-            if point.x > maxX { maxX = point.x }
-        }
-        lasso.points.forEach { point in // find min y
-            if point.y < minY { minY = point.y }
-        }
-        lasso.points.forEach { point in // find max y
-            if point.y > maxY { maxY = point.y }
-        }
-        
-        // bounding box check
-        for layer in layers {
-            var pointInside = false
-            for point in layer.points {
-                if point.x > minX && point.x < maxX && point.y > minY && point.y < maxY {
-                    pointInside = true
-                }
-            }
-            layer.selected = pointInside
-        }
-        
-        // create sides
-        struct Side {
-            let begin: CGPoint
-            let end: CGPoint
-        }
+   
         
         // side length for optimization
         
-        var sides = [Side]()
+        var sides = [PolygonSide]()
         
         guard lasso.points.count > 2 else { return }
         
         var sideBegin = lasso.points[0]
         
-        for i in 0...lasso.points.count - 1 - 1 {
+        for i in 0...lasso.points.count - 2 {
             
             let currentPoint = lasso.points[i]
             
-            let enoughDistance = abs(currentPoint.x - sideBegin.x) > 5 && abs(currentPoint.y - sideBegin.y) > 5
+            let maxSpacingNeeded: CGFloat = 45
             
-            if (currentPoint.x != sideBegin.x && currentPoint.y != sideBegin.y && enoughDistance) {
+            let enoughDistance = abs(currentPoint.x - sideBegin.x) > maxSpacingNeeded || abs(currentPoint.y - sideBegin.y) > maxSpacingNeeded
+            let pointsArentTheSame = true//currentPoint.x != sideBegin.x && currentPoint.y != sideBegin.y
             
-                sides.append(Side(begin: sideBegin, end: lasso.points[i + 1]))
+            let alwaysAddLastPoint = (i == lasso.points.count - 2)
+            
+            if ((pointsArentTheSame && enoughDistance) || alwaysAddLastPoint) {
+            
+                sides.append(PolygonSide(begin: sideBegin, end: lasso.points[i + 1]))
                 
                 sideBegin = lasso.points[i + 1]
             }
@@ -230,14 +314,18 @@ class RenderingView: UIView {
             
         }
         
+        reducedPolygonSides = sides
+        
         
         
         
         // ray intersection helper function
         
-        let pointRayIntersectsSides: (CGPoint, [Side]) -> Bool = { (point, sides) in
+        let pointRayIntersectsSides: (CGPoint, [PolygonSide]) -> (Bool, [CGPoint]) = { (point, sides) in
             
-            guard sides.count > 1 else { return false }
+            guard sides.count > 1 else { return (false, []) }
+            
+            var intersectionPoints: [CGPoint] = []
             
             let layers = self.layers
             let lasso = self.lasso
@@ -258,6 +346,7 @@ class RenderingView: UIView {
                     let xIntersection = v1.x + ((t.y - v1.y) / (v2.y - v1.y)) * (v2.x - v1.x)
                     if xIntersection > t.x {
                         numIntersections += 1
+                        intersectionPoints.append(CGPoint(x: xIntersection, y: t.y))
                     }
                 }
             }
@@ -265,12 +354,23 @@ class RenderingView: UIView {
             let intersectionCountOdd = !(numIntersections % 2 == 0)
             
             if intersectionCountOdd {
-                return true
+                return (true, intersectionPoints)
             }
             
-            return false
+            return (false, intersectionPoints)
         }
         
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        intersectionPoints.removeAll()
+        virtualRays.removeAll()
         
         
         
@@ -282,11 +382,27 @@ class RenderingView: UIView {
         
         for layer in layers {
             
+            var previousPoint = CGPoint.zero
+            
             for point in layer.points {
+                
+                
+                if abs(point.x - previousPoint.x) < 10 && abs(point.y - previousPoint.y) < 10 {
+                    continue
+                }
+                
+                virtualRays.append(point)
+                
+                let r = pointRayIntersectsSides(point, sides)
                 // check ray on each point
-                if pointRayIntersectsSides(point, sides) {
+                if r.0 {
                     layer.selected = true
                 }
+                
+                intersectionPoints.append(contentsOf: r.1)
+                
+                
+                previousPoint = point
             }
         }
         
